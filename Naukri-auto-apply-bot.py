@@ -7,10 +7,10 @@ firstname=''                        #Add your LastNAme
 lastname=''                         #Add your FirstName
 joblink=[]                          #Initialized list to store links
 maxcount=50                         #Max daily apply quota for Naukri
-keywords=['','']                     #Add you list of role you want to apply
-location = ''                        #Add your location for within India no
-applied =0
-failed = 0
+keywords=['','']                    #Add you list of role you want to apply
+location = ''                       #Add your location/city name for within India or remote
+applied =0                          #Count of jobs applied sucessfully
+failed = 0                          #Count of Jobs failed
 applied_list={
     'passed':[],
     'failed':[]
