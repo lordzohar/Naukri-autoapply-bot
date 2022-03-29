@@ -1,5 +1,5 @@
 # Naukri-autoapply-bot
-Automation job that applies to Naukri.com jobs and uses Selenium package for browser automation.
+Automation job that applies to Naukri.com jobs automatically for fatster job hunting and it uses Selenium package for browser automation.
 
 ## Steps to run the file
 
