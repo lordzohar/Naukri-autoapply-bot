@@ -3,7 +3,7 @@ import time
 from selenium import webdriver
 from bs4 import BeautifulSoup
 
-firstname=''                        #Add your LastNAme
+firstname=''                        #Add your LastName
 lastname=''                         #Add your FirstName
 joblink=[]                          #Initialized list to store links
 maxcount=50                         #Max daily apply quota for Naukri
@@ -11,7 +11,7 @@ keywords=['','']                    #Add you list of role you want to apply
 location = ''                       #Add your location/city name for within India or remote
 applied =0                          #Count of jobs applied sucessfully
 failed = 0                          #Count of Jobs failed
-applied_list={
+applied_list={                      #Saved list of applied and failed job links for manual review
     'passed':[],
     'failed':[]
 }
