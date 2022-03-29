@@ -9,7 +9,7 @@ Automation job that applies to Naukri.com jobs and uses Selenium package for bro
 - Login into Naukri.com into the new profile.
 - goto about:profiles and Copy the path of the Root Directory
 - Open Naukriautoapply jobs notebook and paste the path in profiles variable
-- Add your Firstname, lastname, keyword(Job roles) and location
-- Run the Naukri-autoapply notebook
+- Add your Firstname, Lastname, keywords(Job roles) and location(optional)
+- Run the Naukri-autoapply bot by python Naukri-auto-apply-bot.py
 
 ### Feel free to add any changes or update the code as per your requirements.

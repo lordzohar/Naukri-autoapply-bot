@@ -1,4 +1,4 @@
-import csv
+import pandas as pd
 import time
 from selenium import webdriver
 from bs4 import BeautifulSoup
@@ -11,18 +11,23 @@ keywords=['','']                    #Add you list of role you want to apply
 location = ''                       #Add your location/city name for within India or remote
 applied =0                          #Count of jobs applied sucessfully
 failed = 0                          #Count of Jobs failed
-applied_list={                      #Saved list of applied and failed job links for manual review
+applied_list={
     'passed':[],
     'failed':[]
-}
+}                                   #Saved list of applied and failed job links for manual review
 
-profile = webdriver.FirefoxProfile("") #Add your Root directory path
-driver = webdriver.Firefox(profile)
 
+try:
+    profile = webdriver.FirefoxProfile("") #Add your Root directory path
+    driver = webdriver.Firefox(profile)
+except Exception as e:
+    print('Webdriver exception')
 time.sleep(10)
 for k in keywords:
     for i in range(2):
-        url = "https://www.naukri.com/"+k.lower.replace(' ','-')+"-jobs-in-"+location.lower.replace(' ','-')+"-"+str(i+1)
+        if location=='':
+            url = "https://www.naukri.com/"+k.lower().replace(' ','-')+"-"+str(i+1)
+        else: url = "https://www.naukri.com/"+k.lower().replace(' ','-')+"-jobs-in-"+location.lower().replace(' ','-')+"-"+str(i+1)
         driver.get(url)
         print(url)
         time.sleep(3)
@@ -60,8 +65,6 @@ for i in joblink:
                 driver.find_element_by_xpath("//input[@id='CUSTOM-LASTNAME']").send_keys(lastname);
             if driver.find_element_by_xpath("//*[text()='Submit and Apply']"):
                 driver.find_element_by_xpath("//*[text()='Submit and Apply']").click()
-            
-                
         except:
             pass
             
@@ -69,14 +72,10 @@ for i in joblink:
         driver.close()
         break
 print('Completed applying closing browser saving in applied jobs csv')
-try:driver.close()
+try:
+    driver.close()
 except:pass
 csv_file = "naukriapplied.csv"
-try:
-    with open(csv_file, 'a') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=['passed', 'failed'])
-        writer.writeheader()
-        for data in applied_list:
-            writer.writerow(data)
-except IOError:
-    print("I/O error")
+final_dict= dict ([(k, pd.Series(v)) for k,v in applied_list.items()])
+df = pd.DataFrame.from_dict(final_dict)
+df.to_csv(csv_file, index = False)
