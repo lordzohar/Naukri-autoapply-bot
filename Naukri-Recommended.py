@@ -22,6 +22,7 @@ Page: https://www.naukri.com/mnjuser/recommendedjobs
 import os
 import time
 import csv
+import difflib
 import logging
 import re
 from datetime import datetime
@@ -107,6 +108,19 @@ def load_answers():
         logger.warning(f"Could not load {ANSWERS_CSV}: {e}")
 
     return answers
+
+
+def fuzzy_lookup(question_text, known_answers, threshold=0.72):
+    """Return the stored answer for question_text, using fuzzy matching as fallback."""
+    if question_text in known_answers:
+        return known_answers[question_text]
+    matches = difflib.get_close_matches(
+        question_text, known_answers.keys(), n=1, cutoff=threshold
+    )
+    if matches:
+        logger.info(f"   ~ Fuzzy match: '{matches[0]}' → using stored answer")
+        return known_answers[matches[0]]
+    return None
 
 
 def save_answer(question_text, answer, field_type="text"):
@@ -207,6 +221,9 @@ def select_jobs_and_apply(driver):
         if selected >= MAX_SELECT:
             break
         try:
+            if not card.find_elements(By.CSS_SELECTOR, ".tuple-check-box i"):
+                continue
+
             checked_icon = card.find_elements(By.CSS_SELECTOR,
                 ".tuple-check-box i.naukicon-ot-Checked, .tuple-check-box i.naukicon-ot-checkbox-selected")
             if checked_icon:
@@ -303,13 +320,10 @@ def handle_chatbot_drawer(driver, known_answers):
             # --- 3. Save button ready? ---
             try:
                 save_btn = find_save_button(driver)
-                if save_btn:
-                    parent = save_btn.find_element(By.XPATH, "./ancestor::*[contains(@class,'send')]")
-                    if 'disabled' not in (parent.get_attribute('class') or ''):
-                        logger.info("Save button ready. Clicking...")
-                        driver.execute_script("arguments[0].click();", save_btn)
-                        time.sleep(3)
-                        continue
+                if save_btn and click_save_button(driver, save_btn):
+                    logger.info("Save button ready. Clicking...")
+                    time.sleep(3)
+                    continue
             except Exception:
                 pass
 
@@ -388,6 +402,17 @@ def get_user_message_count(driver):
 
 # ============================================================
 # Handler: Radio Buttons
+def _click_save_after_radio(driver):
+    """Click the save button right after selecting a radio option."""
+    try:
+        save_btn = find_save_button(driver)
+        if save_btn and click_save_button(driver, save_btn):
+            logger.info("   Clicked Save after radio selection.")
+            time.sleep(2)
+    except Exception:
+        pass
+
+
 # ============================================================
 
 def handle_radio_buttons(driver, known_answers):
@@ -417,7 +442,7 @@ def handle_radio_buttons(driver, known_answers):
     logger.debug(f"   Options: {options}")
 
     # KNOWN ANSWER → auto-fill (use fresh references)
-    known = known_answers.get(question_text)
+    known = fuzzy_lookup(question_text, known_answers)
     if known:
         radios = container.find_elements(By.CSS_SELECTOR, ".ssrc__radio")
         lbls = container.find_elements(By.CSS_SELECTOR, ".ssrc__label")
@@ -426,7 +451,8 @@ def handle_radio_buttons(driver, known_answers):
                 if rb.get_attribute('value') == known or rb.get_attribute('id') == known:
                     driver.execute_script("arguments[0].click();", rb)
                     logger.info(f"   ✓ Auto-filled: '{known}'")
-                    time.sleep(2)
+                    time.sleep(1)
+                    _click_save_after_radio(driver)
                     return True
             except Exception:
                 continue
@@ -435,7 +461,8 @@ def handle_radio_buttons(driver, known_answers):
                 if lbl.text.strip().lower() == known.lower():
                     driver.execute_script("arguments[0].click();", lbl)
                     logger.info(f"   ✓ Auto-filled: '{known}'")
-                    time.sleep(2)
+                    time.sleep(1)
+                    _click_save_after_radio(driver)
                     return True
             except Exception:
                 continue
@@ -516,27 +543,34 @@ def handle_contenteditable(driver, known_answers):
     logger.info(f"📝 Text question: '{question_text}'")
 
     # KNOWN ANSWER → auto-fill
-    known = known_answers.get(question_text)
+    known = fuzzy_lookup(question_text, known_answers)
     if known:
         try:
             fresh_text_area = find_chat_text_area(driver)
             if fresh_text_area:
-                driver.execute_script("arguments[0].innerText = arguments[1];", fresh_text_area, known)
+                driver.execute_script("""
+                    arguments[0].focus();
+                    arguments[0].innerText = arguments[1];
+                    arguments[0].dispatchEvent(new Event('input', {bubbles: true}));
+                    arguments[0].dispatchEvent(new Event('change', {bubbles: true}));
+                """, fresh_text_area, known)
                 logger.info(f"   ✓ Auto-filled: '{known}'")
-                time.sleep(1)
+                time.sleep(0.5)
+                try:
+                    fresh_text_area.send_keys(Keys.RETURN)
+                except Exception:
+                    pass
+                time.sleep(0.5)
         except Exception as e:
             logger.warning(f"   Could not auto-fill text: {e}")
 
         # Try clicking Save (with fresh reference)
         try:
             save_btn = find_save_button(driver)
-            if save_btn:
-                parent = save_btn.find_element(By.XPATH, "./ancestor::*[contains(@class,'send')]")
-                if 'disabled' not in (parent.get_attribute('class') or ''):
-                    driver.execute_script("arguments[0].click();", save_btn)
-                    logger.info("   Clicked Save after auto-fill.")
-                    time.sleep(3)
-                    return True
+            if save_btn and click_save_button(driver, save_btn):
+                logger.info("   Clicked Save after auto-fill.")
+                time.sleep(3)
+                return True
         except Exception:
             pass
         return True
@@ -575,6 +609,18 @@ def handle_contenteditable(driver, known_answers):
 
     logger.warning("   Timed out waiting for text answer.")
     return False
+
+
+def click_save_button(driver, save_btn):
+    """Click the save/send button, tolerating a missing 'send' ancestor."""
+    try:
+        parent = save_btn.find_element(By.XPATH, "./ancestor::*[contains(@class,'send')]")
+        if 'disabled' in (parent.get_attribute('class') or ''):
+            return False  # genuinely disabled
+    except Exception:
+        pass  # no such ancestor — try clicking anyway
+    driver.execute_script("arguments[0].click();", save_btn)
+    return True
 
 
 def find_chat_text_area(driver):
@@ -656,6 +702,7 @@ def main():
             # Handle chatbot questionnaire (auto-fills known answers, learns new ones)
             handle_chatbot_drawer(driver, known_answers)
             total_applied += MAX_SELECT
+            known_answers = load_answers()  # pick up anything just learned
 
             logger.info(f"Total applied so far: ~{total_applied}")
             logger.info("Returning to recommended page for more jobs...")

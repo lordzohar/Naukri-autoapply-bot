@@ -32,3 +32,5 @@ build/
 venv/
 env/
 .venv/
+
+application_answers.csv
