@@ -51,6 +51,14 @@ NAUKRI_PASSWORD = os.getenv('NAUKRI_PASSWORD', '')
 MAX_SELECT = 5
 ANSWERS_CSV = "application_answers.csv"
 
+TABS = [
+    {"num": 1, "id": "apply",        "label": "Applies"},
+    {"num": 2, "id": "profile",      "label": "Profile"},
+    {"num": 3, "id": "top_candidate","label": "Top Candidate"},
+    {"num": 4, "id": "preference",   "label": "Preferences"},
+    {"num": 5, "id": "similar_jobs", "label": "You might like"},
+]
+
 # ------------------------------------------------------------
 # Logging Setup
 # ------------------------------------------------------------
@@ -667,6 +675,55 @@ def find_save_button(driver):
 
 
 # ============================================================
+# Tab Selection (terminal prompt)
+# ============================================================
+
+def select_tabs():
+    """Prompt the user to pick which job tabs to apply to. Returns list of tab dicts."""
+    print("\n" + "=" * 50)
+    print("Select job tabs to apply to:")
+    for t in TABS:
+        print(f"  {t['num']}. {t['label']}")
+    print("=" * 50)
+    raw = input("Enter numbers (e.g. 1,3,5) or press Enter for Top Candidate: ").strip()
+
+    if not raw:
+        return [TABS[2]]  # default: Top Candidate
+
+    selected = []
+    for part in raw.split(','):
+        part = part.strip()
+        if part.isdigit():
+            idx = int(part) - 1
+            if 0 <= idx < len(TABS):
+                selected.append(TABS[idx])
+
+    if not selected:
+        print("Invalid input — defaulting to Top Candidate.")
+        return [TABS[2]]
+
+    return selected
+
+
+def navigate_to_tab(driver, tab_id):
+    """Navigate to the recommended jobs page and activate the given tab."""
+    driver.get('https://www.naukri.com/mnjuser/recommendedjobs')
+    try:
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".tab-list"))
+        )
+        time.sleep(2)
+        # Click the inner label, not the wrapper div
+        tab_el = driver.find_element(By.CSS_SELECTOR, f"div#{tab_id} .tab-list-item")
+        driver.execute_script("arguments[0].scrollIntoView(true);", tab_el)
+        driver.execute_script("arguments[0].click();", tab_el)
+        logger.info(f"Switched to tab: {tab_id}")
+        time.sleep(3)
+    except Exception as e:
+        logger.warning(f"Could not activate tab '{tab_id}': {e}")
+
+
+# ============================================================
 # Main
 # ============================================================
 
@@ -680,6 +737,9 @@ def main():
         logger.error("Set NAUKRI_EMAIL and NAUKRI_PASSWORD in .env")
         return
 
+    selected_tabs = select_tabs()
+    logger.info(f"Applying to tabs: {', '.join(t['label'] for t in selected_tabs)}")
+
     known_answers = load_answers()
     total_applied = 0
 
@@ -688,25 +748,24 @@ def main():
         driver = create_edge_driver()
         login_naukri(driver)
 
-        # Loop: keep applying until no more recommended jobs
-        while True:
-            # Navigate fresh each iteration
-            driver.get('https://www.naukri.com/mnjuser/recommendedjobs')
-            time.sleep(4)
+        for tab in selected_tabs:
+            logger.info("=" * 50)
+            logger.info(f"Tab: {tab['label']}")
+            logger.info("=" * 50)
 
-            # Select up to 5 jobs and click Apply
-            if not select_jobs_and_apply(driver):
-                logger.info("No more jobs to apply to.")
-                break
+            while True:
+                navigate_to_tab(driver, tab['id'])
 
-            # Handle chatbot questionnaire (auto-fills known answers, learns new ones)
-            handle_chatbot_drawer(driver, known_answers)
-            total_applied += MAX_SELECT
-            known_answers = load_answers()  # pick up anything just learned
+                if not select_jobs_and_apply(driver):
+                    logger.info(f"No more jobs in '{tab['label']}'.")
+                    break
 
-            logger.info(f"Total applied so far: ~{total_applied}")
-            logger.info("Returning to recommended page for more jobs...")
-            time.sleep(3)
+                handle_chatbot_drawer(driver, known_answers)
+                total_applied += MAX_SELECT
+                known_answers = load_answers()
+
+                logger.info(f"Total applied so far: ~{total_applied}")
+                time.sleep(3)
 
         logger.info("=" * 50)
         logger.info(f"✅ Complete! Applied to ~{total_applied} jobs total.")
